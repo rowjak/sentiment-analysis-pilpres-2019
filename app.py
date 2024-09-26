@@ -6,16 +6,17 @@ import re
 from Sastrawi.StopWordRemover.StopWordRemoverFactory import StopWordRemoverFactory
 import json
 from bahasa.stemmer import Stemmer
+import requests
 
 app = Flask(__name__)
 
 
-model = joblib.load('../model/rf_sw_word2vec_sg.pkl')
-scaler = joblib.load('../model/scaller_rf_sw.pkl')
-w2v_model = Word2Vec.load("../model/w2v_model.bin")
+model = joblib.load('model/rf_sw_word2vec_sg.pkl')
+scaler = joblib.load('model/scaller_rf_sw.pkl')
+w2v_model = Word2Vec.load("model/w2v_model.bin")
 
 
-with open('../dictionary/combined_slang_words.json', 'r') as json_file:
+with open('dictionary/combined_slang_words.json', 'r') as json_file:
     slang_words_dict = json.load(json_file)
 
 
@@ -108,5 +109,61 @@ def predict():
     return jsonify(response)
 
 
+@app.route('/webhook', methods=['POST'])
+def webhook():
+    # Mengambil data JSON dari request
+    data = request.get_json()
+
+    # Memeriksa apakah payload ada dalam data
+    if 'payload' not in data:
+        return jsonify({'error': 'Payload not found'}), 400
+
+    # Mengambil body dan from dari payload
+    body = data['payload'].get('body', None)
+    from_number = data['payload'].get('from', None)
+
+    tweet_clean = clean_and_process_text(body)  # Preprocess the tweet
+    stemmer = Stemmer()
+    tweet_stem = stemmer.stem(tweet_clean)
+
+    # Preprocess the tweet (you can add additional cleaning steps)
+    tweet_vector = get_vector_representation(tweet_stem.split(), w2v_model)
+
+    # Scale the tweet vector
+    tweet_vector_scaled = scaler.transform([tweet_vector])
+
+    # Prediksi sentimen menggunakan model RandomForest
+    prediction = model.predict(tweet_vector_scaled)[0]
+    probabilities = model.predict_proba(tweet_vector_scaled)[0]
+    classes = model.classes_
+
+    hasil = (
+        f'Prediksi : {prediction}\n'
+        f'Probabiliti : \n'
+        f'1. {classes[0]} : {probabilities[0]}\n'
+        f'2. {classes[1]} : {probabilities[1]}\n'
+        f'3. {classes[2]} : {probabilities[2]}\n'
+    )
+
+    response = requests.post(
+        'https://whatsapp.inspektorat.pekalongankab.go.id/api/sendText',
+        headers={
+            'Content-Type': 'application/json; charset=utf-8',
+            'Accept': 'application/json',
+            'X-Api-Key': 'KMZWAY87AA'
+        },
+        json={  # Menggunakan parameter `json` untuk mengirim raw JSON
+            'chatId': from_number,
+            'text': hasil,
+            'session': 'NoamChomsky'
+        },
+        verify=False  # Ini sesuai dengan withoutVerifying() di PHP
+    )
+
+    # Mengembalikan respons dari permintaan HTTP
+    return jsonify(response.json()), response.status_code
+
+
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(host='0.0.0.0', port=5000, debug=True)
+
