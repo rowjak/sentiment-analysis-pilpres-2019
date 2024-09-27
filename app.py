@@ -146,11 +146,11 @@ def webhook():
     )
 
     response = requests.post(
-        'https://whatsapp.inspektorat.pekalongankab.go.id/api/sendText',
+        'https://*********/', #rahasia ya ;D
         headers={
             'Content-Type': 'application/json; charset=utf-8',
             'Accept': 'application/json',
-            'X-Api-Key': 'KMZWAY87AA'
+            'X-Api-Key': '*****' # rahasia
         },
         json={  # Menggunakan parameter `json` untuk mengirim raw JSON
             'chatId': from_number,
